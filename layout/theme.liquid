@@ -299,6 +299,12 @@
     </script>
   </head>
 
+  {% if template.name == 'product' %}
+    <script src="{{ 'embroidery.js' | asset_url }}" defer></script>
+  {% endif %}
+
+  <script src="{{ 'embroidery-cart.js' | asset_url }}" defer></script>
+
   <body class="gradient{% if settings.animations_hover_elements != 'none' %} animate--hover-{{ settings.animations_hover_elements }}{% endif %}">
     <a class="skip-to-content-link button visually-hidden" href="#MainContent">
       {{ 'accessibility.skip_to_text' | t }}

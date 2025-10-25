@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev:tailwind": "tailwindcss -i ./assets/tailwind-input.css -o ./assets/tailwind-output.css --watch"
+    "dev:tailwind": "tailwindcss -i ./assets/tailwind-input.css -o ./assets/tailwind-output.css --watch",
+    "dev:shopify": "shopify theme dev"
   },
   "repository": {
     "type": "git",
