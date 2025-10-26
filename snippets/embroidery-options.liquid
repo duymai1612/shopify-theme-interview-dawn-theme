@@ -1,119 +1,271 @@
 {%- comment -%}
-  Embroidery UI (single surcharge per product)
-  Metafield: product.metafields.custom.embroidery_template → metaobject `embroidery_template`
-  Fields: image, char_limit, colors(list), fonts(list), price(Money)
+  Embroidery Options - Product Page (PDP)
+  Modern implementation with per-combination pricing
+  
+  Requirements:
+  - product.metafields.custom.embroidery_template → metaobject reference
+  - embroidery_template fields:
+      - image (File)
+      - char_limit (Integer)
+      - options (List of embroidery_option references)
+      - addon_product (Product reference)
+      - disclaimer_text (Multi-line text, optional)
+  
+  - embroidery_option fields:
+      - label (Single line text)
+      - color (Metaobject reference → color)
+      - font (Metaobject reference → font)
+      - price_delta (Money)
+      - addon_variant_id (Number - variant ID from addon product)
 {%- endcomment -%}
 
 {% assign tpl = product.metafields.custom.embroidery_template.value %}
+
 {% if tpl %}
-  {% assign color_list = tpl.colors.value %}
-  {% assign font_list  = tpl.fonts.value %}
+  {%- comment -%} Build variant mapping for JavaScript {%- endcomment -%}
+  {% assign addon_product = tpl.addon_product.value %}
+  {% assign options_list = tpl.options.value %}
 
-   {%- comment -%} Money → cents cho JS {%- endcomment -%}
-   {% assign raw_price = tpl.price.value | money_without_currency | replace: ',', '' %}
-   {% assign price_cents = raw_price | times: 100 | round %}
-
-  <section id="embroidery" class="mt-6 rounded-2xl border border-gray-200 bg-gray-50">
-    <!-- Row: toggle + price -->
+  <section id="embroidery" class="mt-6 rounded-2xl border border-gray-200 bg-gray-50" role="region" aria-labelledby="emb-heading">
+    
+    {%- comment -%} Toggle checkbox + price display {%- endcomment -%}
     <div class="flex items-center justify-between px-4 py-3 md:px-6">
-      <label class="inline-flex items-center gap-2 cursor-pointer select-none">
-        <input type="checkbox" class="h-4 w-4 rounded border-gray-300" data-emb-toggle-checkbox>
-        <span class="text-sm md:text-base">Add Embroidered Name</span>
+      <label for="emb-toggle-checkbox" class="inline-flex items-center gap-2 cursor-pointer select-none">
+        <input 
+          type="checkbox" 
+          id="emb-toggle-checkbox"
+          class="h-5 w-5 rounded border-gray-300 focus:ring-2 focus:ring-purple-600" 
+          data-emb-toggle-checkbox
+          aria-describedby="emb-price-display"
+        >
+        <span id="emb-heading" class="text-sm md:text-base font-medium">Add Embroidered Name</span>
       </label>
-       <span class="text-sm text-gray-700">+{{ tpl.price.value | money }}</span>
+      
+      <span 
+        id="emb-price-display" 
+        class="text-sm font-semibold text-gray-700" 
+        data-emb-price-display
+        aria-live="polite"
+      >
+        {%- comment -%} Display starting price (cheapest option) {%- endcomment -%}
+        {% if options_list and options_list.size > 0 %}
+          {% assign min_price = 999999 %}
+          {% for opt in options_list %}
+            {% assign opt_price = opt.price_delta.value | money_without_currency | replace: ',', '' | times: 100 | round %}
+            {% if opt_price < min_price %}
+              {% assign min_price = opt_price %}
+            {% endif %}
+          {% endfor %}
+          +{{ min_price | divided_by: 100.0 | money }}
+        {% else %}
+          +£0.00
+        {% endif %}
+      </span>
+      
       <input type="hidden" name="emb_enabled" value="false">
     </div>
 
-    <!-- Collapsible panel -->
+    {%- comment -%} Collapsible panel {%- endcomment -%}
     <div class="px-4 pb-4 md:px-6 md:pb-6 hidden" data-emb-panel>
-      <p class="text-xs text-gray-600 mb-4">Add up to {{ tpl.char_limit }} characters</p>
-      <div>
-        <div class="w-full flex justify-between gap-[40px]">
-          <!-- Name -->
+      
+      <p class="text-xs text-gray-600 mb-4">
+        Add up to {{ tpl.char_limit | default: 10 }} characters
+      </p>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        
+        {%- comment -%} Left column: Inputs {%- endcomment -%}
+        <div class="space-y-4">
+          
+          {%- comment -%} Name input {%- endcomment -%}
           <div>
-         
-            <label class="block mb-4">
-                <input name="emb_name" maxlength="{{ tpl.char_limit }}" placeholder="Embroidered Name"
-                    class="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    data-emb-name>
-                <span class="mt-1 block text-xs text-gray-500">
-                <span data-emb-count>0</span>/{{ tpl.char_limit }}
-                </span>
+            <label for="emb-name" class="block text-sm font-medium mb-2">
+              Embroidered Name <span class="text-red-500" aria-label="required">*</span>
             </label>
-            <!-- Colours -->
-            {% if color_list and color_list != blank %}
-                <fieldset class="mb-4">
-                <legend class="mb-2 text-sm font-medium">Choose letter colour</legend>
-                <div class="flex items-center gap-4">
-                    {% for c_ref in color_list %}
-                    <label class="flex flex-col items-center gap-1 cursor-pointer">
-                        <input type="radio"
-                            name="emb_colour"
-                            value="{{ c_ref.code }}"
-                            class="peer sr-only"
-                            {% if forloop.first %}checked{% endif %}>
-            
-                        <span class="inline-flex items-center justify-center h-8 w-8 rounded-full border border-gray-300
-                                    peer-checked:border-gray-900 peer-checked:ring-2 peer-checked:ring-gray-900/20"
-                              {% unless c_ref.swatch %}style="background-color: {{ c_ref.code }};"{% endunless %}>
-                        {% if c_ref.swatch %}
-                            <img src="{{ c_ref.swatch | image_url: width: 48 }}"
-                                width="48" height="48"
-                                class="h-6 w-6 rounded-full">
-                        {% endif %}
-                        </span>
-                        <span class="text-xs text-gray-700">{{ c_ref.title }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-                </fieldset>
-            {% endif %}
-            <!-- Fonts -->
-            {% if font_list and font_list != blank %}
-                <fieldset class="mb-4">
-                <legend class="mb-2 text-sm font-medium">Choose font</legend>
-                <div class="flex gap-3 flex-wrap">
-                    {% for f_ref in font_list %}
-                    <label class="cursor-pointer">
-                        <input type="radio"
-                            name="emb_font"
-                            value="{{ f_ref.code }}"
-                            class="peer sr-only"
-                            {% if forloop.first %}checked{% endif %}>
-            
-                        <span class="inline-flex items-center justify-center gap-2 border px-[50px] rounded-sm py-3 text-sm font-medium
-                                    peer-checked:border-gray-900 peer-checked:bg-white peer-checked:text-black
-                                    peer-unchecked:border-gray-200 peer-unchecked:bg-gray-100 peer-unchecked:text-gray-500
-                                    hover:border-gray-300 transition-colors">
-                        {{ f_ref.title }}
-                        </span>
-                    </label>
-                    {% endfor %}
-                </div>
-                </fieldset>
-            {% endif %}
-        </div>
-      <!-- Right column: Image -->
-      <div class="flex justify-center lg:justify-start">
-        {% if tpl.image %}
-          <img src="{{ tpl.image | image_url: width: 228 }}" width="228" height="228"
-               srcset="{{ tpl.image | image_url: width: 228 }} 1x, {{ tpl.image | image_url: width: 446 }} 2x"
-               alt="Mockup Image"
-               class="w-full max-w-sm rounded-xl border border-gray-200">
-        {% else %}
-          <div class="w-full max-w-sm aspect-square rounded-xl border border-dashed border-gray-300 grid place-items-center text-gray-400">
-            There is no image for this template.
+            <input 
+              type="text"
+              id="emb-name"
+              name="emb_name"
+              maxlength="{{ tpl.char_limit | default: 10 }}"
+              placeholder="Enter name"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+              data-emb-name
+              aria-describedby="emb-char-count"
+              aria-required="true"
+            >
+            <div id="emb-char-count" class="mt-1 text-xs text-gray-500" aria-live="polite">
+              <span data-emb-count>0</span>/{{ tpl.char_limit | default: 10 }} characters
+            </div>
           </div>
-        {% endif %}
-      </div>
-    </div>
-    <p class="text-xs">Unfortunately we can not accept returns or exchanges on embroidered items.</p>
+
+          {%- comment -%} Color selector {%- endcomment -%}
+          {% if options_list and options_list.size > 0 %}
+            {%- comment -%} Extract unique colors {%- endcomment -%}
+            {% assign unique_colors = '' | split: '' %}
+            {% assign unique_color_codes = '' | split: '' %}
+            
+            {% for opt in options_list %}
+              {% assign color_code = opt.color.code %}
+              {% unless unique_color_codes contains color_code %}
+                {% assign unique_colors = unique_colors | push: opt.color %}
+                {% assign unique_color_codes = unique_color_codes | push: color_code %}
+              {% endunless %}
+            {% endfor %}
+
+            {% if unique_colors.size > 0 %}
+              <fieldset class="space-y-2">
+                <legend class="text-sm font-medium">
+                  Choose letter colour <span class="text-red-500" aria-label="required">*</span>
+                </legend>
+                <div class="flex items-center gap-4" role="radiogroup" aria-required="true">
+                  {% for color in unique_colors %}
+                    <label class="flex flex-col items-center gap-1 cursor-pointer">
+                      <input 
+                        type="radio"
+                        name="emb_colour"
+                        value="{{ color.code }}"
+                        data-label="{{ color.title }}"
+                        class="sr-only peer"
+                        {% if forloop.first %}checked{% endif %}
+                        required
+                        aria-label="{{ color.title }}"
+                      >
+                      
+                      <span 
+                        class="inline-flex items-center justify-center h-12 w-12 rounded-full border-2 border-gray-300 peer-checked:border-gray-900 peer-checked:ring-2 peer-checked:ring-gray-900/20 peer-focus:ring-2 peer-focus:ring-purple-600 transition-all"
+                        {% if color.swatch %}
+                          style="background-image: url('{{ color.swatch | image_url: width: 48 }}'); background-size: cover;"
+                        {% else %}
+                          style="background-color: {{ color.code }};"
+                        {% endif %}
+                        aria-hidden="true"
+                      >
+                        {% if color.swatch %}
+                          <img 
+                            src="{{ color.swatch | image_url: width: 48 }}" 
+                            alt=""
+                            class="h-10 w-10 rounded-full"
+                            loading="lazy"
+                          >
+                        {% endif %}
+                      </span>
+                      <span class="text-xs text-gray-700">{{ color.title }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </fieldset>
+            {% endif %}
+          {% endif %}
+
+          {%- comment -%} Font selector {%- endcomment -%}
+          {% if options_list and options_list.size > 0 %}
+            {%- comment -%} Extract unique fonts {%- endcomment -%}
+            {% assign unique_fonts = '' | split: '' %}
+            {% assign unique_font_codes = '' | split: '' %}
+            
+            {% for opt in options_list %}
+              {% assign font_code = opt.font.code %}
+              {% unless unique_font_codes contains font_code %}
+                {% assign unique_fonts = unique_fonts | push: opt.font %}
+                {% assign unique_font_codes = unique_font_codes | push: font_code %}
+              {% endunless %}
+            {% endfor %}
+
+            {% if unique_fonts.size > 0 %}
+              <fieldset class="space-y-2">
+                <legend class="text-sm font-medium">
+                  Choose font <span class="text-red-500" aria-label="required">*</span>
+                </legend>
+                <div class="flex gap-3 flex-wrap" role="radiogroup" aria-required="true">
+                  {% for font in unique_fonts %}
+                    <label class="cursor-pointer">
+                      <input 
+                        type="radio"
+                        name="emb_font"
+                        value="{{ font.code }}"
+                        data-label="{{ font.title }}"
+                        class="sr-only peer"
+                        {% if forloop.first %}checked{% endif %}
+                        required
+                        aria-label="{{ font.title }}"
+                      >
+                      
+                      <span 
+                        class="inline-flex items-center justify-center px-8 py-3 text-sm font-medium border-2 rounded-lg transition-all
+                               peer-checked:border-gray-900 peer-checked:bg-white peer-checked:text-black peer-checked:shadow-sm
+                               peer-unchecked:border-gray-200 peer-unchecked:bg-gray-100 peer-unchecked:text-gray-600
+                               peer-focus:ring-2 peer-focus:ring-purple-600
+                               hover:border-gray-400"
+                        {% if font.preview_class %}
+                          style="font-family: {{ font.preview_class }};"
+                        {% endif %}
+                      >
+                        {{ font.title }}
+                      </span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </fieldset>
+            {% endif %}
+          {% endif %}
+
+        </div>
+
+        {%- comment -%} Right column: Preview image {%- endcomment -%}
+        <div class="flex flex-col items-center justify-start">
+          {% if tpl.image %}
+            <img 
+              src="{{ tpl.image | image_url: width: 400 }}" 
+              srcset="{{ tpl.image | image_url: width: 400 }} 1x, {{ tpl.image | image_url: width: 800 }} 2x"
+              alt="Embroidery preview mockup"
+              width="400"
+              height="400"
+              class="w-full max-w-sm rounded-xl border border-gray-200 shadow-sm"
+              loading="lazy"
+            >
+          {% else %}
+            <div class="w-full max-w-sm aspect-square rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-sm">
+              Preview image not available
+            </div>
+          {% endif %}
+        </div>
 
       </div>
+
+      {%- comment -%} Disclaimer text {%- endcomment -%}
+      {% if tpl.disclaimer_text %}
+        <p class="mt-4 text-xs text-gray-600">
+          {{ tpl.disclaimer_text }}
+        </p>
+      {% else %}
+        <p class="mt-4 text-xs text-gray-600">
+          Unfortunately we can not accept returns or exchanges on embroidered items.
+        </p>
+      {% endif %}
+
     </div>
 
+    {%- comment -%} Configuration data for JavaScript {%- endcomment -%}
     <script type="application/json" data-emb-config>
-      { "price_cents": {{ price_cents }}, "currency": {{ cart.currency.iso_code | json }} }
+      {
+        "addon_product_id": {% if addon_product %}{{ addon_product.id | json }}{% else %}null{% endif %},
+        "variant_map": [
+          {% if options_list %}
+            {% for opt in options_list %}
+              {
+                "id": {% if opt.addon_variant_id %}{{ opt.addon_variant_id }}{% else %}null{% endif %},
+                "color": {{ opt.color.code | json }},
+                "font": {{ opt.font.code | json }},
+                "label": {{ opt.label | json }},
+                "price_cents": {% assign price_raw = opt.price_delta.value | money_without_currency | replace: ',', '' | replace: '.', '' %}{{ price_raw | times: 1 }}
+              }{% unless forloop.last %},{% endunless %}
+            {% endfor %}
+          {% endif %}
+        ],
+        "currency": {{ cart.currency.iso_code | json }},
+        "char_limit": {{ tpl.char_limit | default: 10 }}
+      }
     </script>
+
   </section>
 {% endif %}

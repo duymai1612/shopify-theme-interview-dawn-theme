@@ -1,78 +1,124 @@
-{% comment %}
-  Check if this product has embroidery metafield and get price
-  We need to check the product metafields, not the cart item properties
-{% endcomment %}
-{% assign product_has_embroidery = false %}
-{% assign embroidery_price = 0 %}
-{% for product in collections.all.products %}
-  {% if product.id == item.product_id and product.metafields.custom.embroidery_template %}
-    {% assign product_has_embroidery = true %}
-    {% assign embroidery_template = product.metafields.custom.embroidery_template.value %}
-    {% if embroidery_template.price %}
-      {% assign embroidery_price = embroidery_template.price.value %}
-    {% endif %}
-    {% break %}
-  {% endif %}
-{% endfor %}
-
-{% if product_has_embroidery %}
-<div class="cart-item__embroidery mt-2 p-3 rounded-lg bg-gray-100 text-sm leading-relaxed">
-  <div class="flex items-center justify-between mb-1">
-    {% if item.properties._embroidery == 'true' %}
-      <!-- When checked: show toggleable checkbox -->
-      <label class="inline-flex items-center gap-2 cursor-pointer">
-        <input 
-          type="checkbox" 
-          checked
-          class="h-4 w-4"
-          data-emb-cart-toggle
-          data-line-key="{{ item.key }}"
-          id="emb-toggle-{{ item.key }}"
-          name="emb-toggle-{{ item.key }}"
-        >
-        <span>Add Embroidered Name</span>
-      </label>
-    {% else %}
-      <!-- When not checked: show clickable link -->
-      <a href="{{ item.product.url }}?embroidery=true" class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 cursor-pointer">
-        <input 
-          type="checkbox" 
-          class="h-4 w-4 pointer-events-none"
-          readonly
-        >
-        <span>Add Embroidered Name</span>
-      </a>
-    {% endif %}
-    <span class="text-gray-700" data-emb-surcharge="{{ embroidery_price | money_without_currency | replace: ',', '' }}">(+{{ embroidery_price | money }})</span>
-  </div>
-
-  {% if item.properties._embroidery == 'true' %}
-    <div class="text-xs text-gray-700 mt-2">
-      <div class="flex items-center justify-between">
-        <div>
-          {% if item.properties['Embroidery Name'] %}
-            {{ item.properties['Embroidery Name'] }}
-          {% endif %}
-
-          {% if item.properties['Embroidery Colour Code'] or item.properties['Embroidery Font Code'] %}
-            ,
-          {% endif %}
-
-          {% if item.properties['Embroidery Colour Code'] %}
-            {{ item.properties['Embroidery Colour Code'] }}
-          {% endif %}
-
-          {% if item.properties['Embroidery Colour Code'] and item.properties['Embroidery Font Code'] %}
-            ,
-          {% endif %}
-
-          {% if item.properties['Embroidery Font Code'] %}
-            {{ item.properties['Embroidery Font Code'] }}
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  {% endif %}
-</div>
-{% endif %}
+{%- comment -%}
+  Embroidery Cart Line Display - Cart Drawer
+  Modern implementation with full editing capability
   
+  Usage: {% render 'embroidery-cart-line', item: cart_item %}
+{%- endcomment -%}
+
+{%- comment -%} Direct product access - O(1) instead of O(n) loop {%- endcomment -%}
+{% assign template = item.product.metafields.custom.embroidery_template.value %}
+
+{% if template %}
+  <div class="cart-item__embroidery mt-3 p-3 rounded-lg bg-gray-50 border border-gray-200" data-line-key="{{ item.key }}">
+    
+    {%- comment -%} Header: Toggle + Price {%- endcomment -%}
+    <div class="flex items-center justify-between mb-2">
+      
+      {% if item.properties._embroidery == 'true' %}
+        {%- comment -%} Embroidery is active - show checked checkbox {%- endcomment -%}
+        <label for="emb-toggle-{{ item.key }}" class="inline-flex items-center gap-2 cursor-pointer">
+          <input 
+            type="checkbox" 
+            id="emb-toggle-{{ item.key }}"
+            checked
+            class="h-4 w-4 rounded border-gray-300 focus:ring-2 focus:ring-purple-600"
+            data-emb-cart-toggle
+            data-line-key="{{ item.key }}"
+            aria-label="Toggle embroidery for {{ item.product.title }}"
+          >
+          <span class="text-sm font-medium">Add Embroidered Name</span>
+        </label>
+      {% else %}
+        {%- comment -%} Embroidery is inactive - show unchecked checkbox {%- endcomment -%}
+        <label for="emb-toggle-{{ item.key }}" class="inline-flex items-center gap-2 cursor-pointer">
+          <input 
+            type="checkbox" 
+            id="emb-toggle-{{ item.key }}"
+            class="h-4 w-4 rounded border-gray-300 focus:ring-2 focus:ring-purple-600"
+            data-emb-cart-toggle
+            data-line-key="{{ item.key }}"
+            aria-label="Add embroidery to {{ item.product.title }}"
+          >
+          <span class="text-sm text-gray-700">Add Embroidered Name</span>
+        </label>
+      {% endif %}
+
+      {%- comment -%} Price display {%- endcomment -%}
+      {% if template.options.value and template.options.value.size > 0 %}
+        {% assign min_price = 999999 %}
+        {% for opt in template.options.value %}
+          {% assign opt_price_raw = opt.price_delta.value | money_without_currency | replace: ',', '' | replace: '.', '' %}
+          {% assign opt_price_cents = opt_price_raw | times: 1 %}
+          {% if opt_price_cents < min_price %}
+            {% assign min_price = opt_price_cents %}
+          {% endif %}
+        {% endfor %}
+        <span class="text-sm text-gray-600">(+{{ min_price | divided_by: 100.0 | money }})</span>
+      {% endif %}
+    </div>
+
+    {%- comment -%} Embroidery details (only show when active) {%- endcomment -%}
+    {% if item.properties._embroidery == 'true' %}
+      <div class="embroidery-details space-y-2">
+        
+        {%- comment -%} Display current embroidery configuration {%- endcomment -%}
+        <div class="text-sm text-gray-700">
+          <div class="flex items-start justify-between">
+            <div class="flex-1">
+              {% if item.properties['Embroidery Name'] %}
+                <span class="font-medium">Name:</span> 
+                <span class="font-semibold">"{{ item.properties['Embroidery Name'] }}"</span>
+              {% endif %}
+
+              {% if item.properties['Embroidery Color'] or item.properties['Embroidery Font'] %}
+                <br>
+                <span class="text-xs text-gray-600">
+                  {% if item.properties['Embroidery Color'] %}
+                    {{ item.properties['Embroidery Color'] }}
+                  {% endif %}
+                  {% if item.properties['Embroidery Color'] and item.properties['Embroidery Font'] %}
+                    •
+                  {% endif %}
+                  {% if item.properties['Embroidery Font'] %}
+                    {{ item.properties['Embroidery Font'] }}
+                  {% endif %}
+                </span>
+              {% endif %}
+            </div>
+
+            {%- comment -%} Edit button {%- endcomment -%}
+            <button 
+              type="button"
+              class="ml-3 text-xs text-purple-700 hover:text-purple-900 underline focus:outline-none focus:ring-2 focus:ring-purple-600 rounded px-1"
+              data-emb-edit-btn
+              data-line-key="{{ item.key }}"
+              aria-label="Edit embroidery for {{ item.product.title }}"
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+
+        {%- comment -%} Show associated addon fee line info (if visible) {%- endcomment -%}
+        {% if item.properties._emb_bundle_id %}
+          {% assign bundle_id = item.properties._emb_bundle_id %}
+          {% for cart_item in cart.items %}
+            {% if cart_item.properties._emb_addon == 'true' and cart_item.properties._emb_bundle_id == bundle_id %}
+              <div class="text-xs text-gray-500 italic">
+                {{ cart_item.properties['Embroidery Fee'] }}
+              </div>
+              {% break %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+
+      </div>
+    {% else %}
+      {%- comment -%} When not active, show add prompt {%- endcomment -%}
+      <p class="text-xs text-gray-500 mt-1">
+        Check the box above to add embroidery to this item
+      </p>
+    {% endif %}
+
+  </div>
+{% endif %}
