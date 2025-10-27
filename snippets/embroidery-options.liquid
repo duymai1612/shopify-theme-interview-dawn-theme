@@ -28,7 +28,7 @@
     <div class="px-4 pb-4 md:px-6 md:pb-6 hidden" data-emb-panel>
       <p class="text-xs text-gray-600 mb-4">Add up to {{ tpl.char_limit }} characters</p>
       <div>
-        <div class="w-full flex justify-between gap-[40px]">
+        <div class="w-full flex flex-col md:flex-row justify-between gap-[40px] md:gap-[60px]">
           <!-- Name -->
           <div>
          
@@ -94,7 +94,7 @@
             {% endif %}
         </div>
       <!-- Right column: Image -->
-      <div class="flex justify-center lg:justify-start">
+      <div class="flex justify-start">
         {% if tpl.image %}
           <img src="{{ tpl.image | image_url: width: 228 }}" width="228" height="228"
                srcset="{{ tpl.image | image_url: width: 228 }} 1x, {{ tpl.image | image_url: width: 446 }} 2x"
@@ -107,7 +107,7 @@
         {% endif %}
       </div>
     </div>
-    <p class="text-xs">Unfortunately we can not accept returns or exchanges on embroidered items.</p>
+    <p class="text-xl pt-[24px] md:pt-4">Unfortunately we can not accept returns or exchanges on embroidered items.</p>
 
       </div>
     </div>
